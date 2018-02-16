@@ -8,10 +8,10 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
-	"os/exec"
 )
 
 const (
@@ -25,7 +25,7 @@ const (
 	SYSTEMD_FOLDER  = "systemd"
 
 	URL_BASE_GIT   = "https://api.github.com/"
-	AUTH_TOKEN_GIT = "067db038ffc37e217a307c809d4c833b91d7f894"
+	AUTH_TOKEN_GIT = "	849c45a7248cec2d8c81a4baf112e1f4f75b935c"
 )
 
 var (
@@ -58,13 +58,13 @@ func main() {
 	}
 	urlGit := ""
 	if flag_gitRepo {
-		
+
 		resp, err := createGitRepository()
 		if err != nil {
 			printError(err.Error())
 		}
-		urlGit = resp["clone_url"].(string)
-		if urlGit == ""{
+		urlGit = resp["ssh_url"].(string)
+		if urlGit == "" {
 			printError("Url do git é invalida")
 		}
 	}
@@ -82,10 +82,10 @@ func main() {
 		cmd := exec.Command("git", "clone", urlGit, dirAppBase)
 		err := cmd.Run()
 		if err != nil {
-			printError("git clone "+urlGit+" "+ dirBase+" | "+err.Error())
+			printError("git clone " + urlGit + " " + dirBase + " | " + err.Error())
 		}
-		 
-	}else{ 
+
+	} else {
 		createDir(dirAppBase)
 	}
 
@@ -102,6 +102,28 @@ func main() {
 		}
 	}
 
+	if flag_gitRepo {
+		cmd := exec.Command("git", "--git-dir", dirAppBase+"/.git", "--work-tree", dirAppBase, "add", "--all")
+		err := cmd.Run()
+		if err != nil {
+			errString := fmt.Sprintf("Command: git --git-dir=%s --work-tree=%s add --all. Error [%s]", dirAppBase+"/.git", dirAppBase, err.Error())
+			printError(errString)
+		}
+
+		cmd = exec.Command("git", "--git-dir", dirAppBase+"/.git", "--work-tree", dirAppBase, "commit", "-m", "First commit")
+		err = cmd.Run()
+		if err != nil {
+			errString := fmt.Sprintf("Command: git --git-dir=%s --work-tree=%s commit -m \"First commit\". Error [%s]", dirAppBase+"/.git", dirAppBase, err.Error())
+			printError(errString)
+		}
+
+		cmd = exec.Command("git", "--git-dir", dirAppBase+"/.git", "--work-tree", dirAppBase, "push")
+		err = cmd.Run()
+		if err != nil {
+			errString := fmt.Sprintf("Command: git --git-dir=%s --work-tree=%s push. Error [%s]", dirAppBase+"/.git", dirAppBase, err.Error())
+			printError(errString)
+		}
+	}
 	/*TODO:
 	implemente validation method
 
@@ -233,7 +255,7 @@ type stAPIGitCreateRepoRequest struct {
 	Init        bool   `json:"auto_init"`
 }
 
-func createGitRepository() ( map[string]interface{}, error){
+func createGitRepository() (map[string]interface{}, error) {
 	url := URL_BASE_GIT + "user/repos"
 
 	t := stAPIGitCreateRepoRequest{
@@ -251,10 +273,10 @@ func createGitRepository() ( map[string]interface{}, error){
 	body := []byte{}
 	body, err = requestGit(http.MethodPost, url, payload, http.StatusCreated)
 	if err != nil {
-		return nil, err   
+		return nil, err
 	}
 	mapResp := map[string]interface{}{}
-	err = json.Unmarshal(body,&mapResp)
+	err = json.Unmarshal(body, &mapResp)
 	if err != nil {
 		return nil, err
 	}
@@ -275,11 +297,11 @@ func deleteGitRepository() error {
 	return nil
 }
 
-func requestGit(verbHttp, url string, payload io.Reader, statusHttp int) ([]byte, error){
+func requestGit(verbHttp, url string, payload io.Reader, statusHttp int) ([]byte, error) {
 
 	req, err := http.NewRequest(verbHttp, url, payload)
 	if err != nil {
-		return nil, err 
+		return nil, err
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -287,13 +309,13 @@ func requestGit(verbHttp, url string, payload io.Reader, statusHttp int) ([]byte
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, err 
+		return nil, err
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err 
+		return nil, err
 	}
 	if resp.StatusCode != statusHttp {
 		return nil, fmt.Errorf("Falha na chamada de API para o github[%s]. Codigo http [%d]. Body [%s]", url, resp.StatusCode, body)
