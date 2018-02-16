@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"os/exec"
 )
 
 const (
@@ -24,7 +25,7 @@ const (
 	SYSTEMD_FOLDER  = "systemd"
 
 	URL_BASE_GIT   = "https://api.github.com/"
-	AUTH_TOKEN_GIT = "9331815dd732aef94fee6f26319dd59e15c835e4"
+	AUTH_TOKEN_GIT = "067db038ffc37e217a307c809d4c833b91d7f894"
 )
 
 var (
@@ -55,11 +56,16 @@ func main() {
 	if err != nil {
 		printError(err.Error())
 	}
-	
+	urlGit := ""
 	if flag_gitRepo {
-		err := createGitRepository()
+		
+		resp, err := createGitRepository()
 		if err != nil {
 			printError(err.Error())
+		}
+		urlGit = resp["clone_url"].(string)
+		if urlGit == ""{
+			printError("Url do git é invalida")
 		}
 	}
 
@@ -70,8 +76,18 @@ func main() {
 	applicationNameNormalized = normalizeAppName(flag_applicationName)
 	setAllDirs()
 
+	//printError("git clone "+urlGit +" "+ dirBase)
 	dirAppBase := dirBase + "/" + flag_applicationName
-	createDir(dirAppBase)
+	if flag_gitRepo {
+		cmd := exec.Command("git", "clone", urlGit, dirAppBase)
+		err := cmd.Run()
+		if err != nil {
+			printError("git clone "+urlGit+" "+ dirBase+" | "+err.Error())
+		}
+		 
+	}else{ 
+		createDir(dirAppBase)
+	}
 
 	for d, content := range allDirs {
 		folderPath := dirAppBase + "/" + d
@@ -217,7 +233,7 @@ type stAPIGitCreateRepoRequest struct {
 	Init        bool   `json:"auto_init"`
 }
 
-func createGitRepository() error {
+func createGitRepository() ( map[string]interface{}, error){
 	url := URL_BASE_GIT + "user/repos"
 
 	t := stAPIGitCreateRepoRequest{
@@ -228,35 +244,42 @@ func createGitRepository() error {
 
 	b, err := json.Marshal(t)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	payload := strings.NewReader(string(b))
-
-	err = requestGit(http.MethodPost, url, payload, http.StatusCreated)
+	body := []byte{}
+	body, err = requestGit(http.MethodPost, url, payload, http.StatusCreated)
 	if err != nil {
-		return err
+		return nil, err   
 	}
+	mapResp := map[string]interface{}{}
+	err = json.Unmarshal(body,&mapResp)
+	if err != nil {
+		return nil, err
+	}
+
 	alreadyCreatedGitRepo = true
-	return nil
+
+	return mapResp, nil
 }
 
 func deleteGitRepository() error {
 
 	url := URL_BASE_GIT + "repos/josuehennemann/" + flag_applicationName
 
-	err := requestGit(http.MethodDelete, url, nil, http.StatusNoContent)
+	_, err := requestGit(http.MethodDelete, url, nil, http.StatusNoContent)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func requestGit(verbHttp, url string, payload io.Reader, statusHttp int) error {
+func requestGit(verbHttp, url string, payload io.Reader, statusHttp int) ([]byte, error){
 
 	req, err := http.NewRequest(verbHttp, url, payload)
 	if err != nil {
-		return err
+		return nil, err 
 	}
 
 	req.Header.Add("Content-Type", "application/json")
@@ -264,18 +287,18 @@ func requestGit(verbHttp, url string, payload io.Reader, statusHttp int) error {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err 
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err 
 	}
 	if resp.StatusCode != statusHttp {
-		return fmt.Errorf("Falha na chamada de API para o github[%s]. Codigo http [%d]. Body [%s]", url, resp.StatusCode, body)
+		return nil, fmt.Errorf("Falha na chamada de API para o github[%s]. Codigo http [%d]. Body [%s]", url, resp.StatusCode, body)
 	}
-	return nil
+	return body, nil
 
 }
 
