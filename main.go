@@ -23,9 +23,10 @@ const (
 	SERVER_FOLDER   = "server"
 	COMPANY_NAME    = "br.com.josuehennemann"
 	SYSTEMD_FOLDER  = "systemd"
+	CONF_FOLDER     = "conf"
 
 	URL_BASE_GIT   = "https://api.github.com/"
-	AUTH_TOKEN_GIT = "	849c45a7248cec2d8c81a4baf112e1f4f75b935c"
+	AUTH_TOKEN_GIT = "067db038ffc37e217a307c809d4c833b91d7f894"
 )
 
 var (
@@ -63,7 +64,7 @@ func main() {
 		if err != nil {
 			printError(err.Error())
 		}
-		urlGit = resp["ssh_url"].(string)
+		urlGit = resp["clone_url"].(string)
 		if urlGit == "" {
 			printError("Url do git é invalida")
 		}
@@ -102,31 +103,8 @@ func main() {
 		}
 	}
 
-	if flag_gitRepo {
-		cmd := exec.Command("git", "--git-dir", dirAppBase+"/.git", "--work-tree", dirAppBase, "add", "--all")
-		err := cmd.Run()
-		if err != nil {
-			errString := fmt.Sprintf("Command: git --git-dir=%s --work-tree=%s add --all. Error [%s]", dirAppBase+"/.git", dirAppBase, err.Error())
-			printError(errString)
-		}
-
-		cmd = exec.Command("git", "--git-dir", dirAppBase+"/.git", "--work-tree", dirAppBase, "commit", "-m", "First commit")
-		err = cmd.Run()
-		if err != nil {
-			errString := fmt.Sprintf("Command: git --git-dir=%s --work-tree=%s commit -m \"First commit\". Error [%s]", dirAppBase+"/.git", dirAppBase, err.Error())
-			printError(errString)
-		}
-
-		cmd = exec.Command("git", "--git-dir", dirAppBase+"/.git", "--work-tree", dirAppBase, "push")
-		err = cmd.Run()
-		if err != nil {
-			errString := fmt.Sprintf("Command: git --git-dir=%s --work-tree=%s push. Error [%s]", dirAppBase+"/.git", dirAppBase, err.Error())
-			printError(errString)
-		}
-	}
 	/*TODO:
-	implemente validation method
-
+	  implemente validation method
 	*/
 
 }
@@ -211,12 +189,25 @@ func buildContentDir(tp string) *StContentDir {
 
 	case SERVER_FOLDER:
 		content := parseContentFile(contentFileServerGo)
-		itemReadme := StItemContentDir{Name: applicationNameNormalized + ".go", Content: content}
-		list = append(list, itemReadme)
+		itemMain := StItemContentDir{Name: applicationNameNormalized + ".go", Content: content}
+		list = append(list, itemMain)
+		content = parseContentFile(contentGlobalFileServerGo)
+		itemGlobal := StItemContentDir{Name: applicationNameNormalized + "Globals.go", Content: content}
+		list = append(list, itemGlobal)
+		content = parseContentFile(contentConfFileServerGo)
+		itemConf := StItemContentDir{Name: applicationNameNormalized + "Conf.go", Content: content}
+		list = append(list, itemConf)
+
 		folderSystemD := StItemContentDir{Name: SYSTEMD_FOLDER, Dir: true}
 		list = append(list, folderSystemD)
 		itemSystemD := StItemContentDir{Name: SYSTEMD_FOLDER + "/" + flag_applicationName + ".service", Content: "TODO: montar conteudo"}
 		list = append(list, itemSystemD)
+		folderConf := StItemContentDir{Name: CONF_FOLDER, Dir: true}
+		list = append(list, folderConf)
+		confProduction := StItemContentDir{Name: CONF_FOLDER + "/" + flag_applicationName + ".conf", Content: ""}
+		list = append(list, confProduction)
+		confDev := StItemContentDir{Name: CONF_FOLDER + "/" + flag_applicationName + ".dev.conf", Content: ""}
+		list = append(list, confDev)
 
 	default:
 		return nil
@@ -326,86 +317,87 @@ func requestGit(verbHttp, url string, payload io.Reader, statusHttp int) ([]byte
 
 var contentFileProto = `
 // Copyright {{year}} {{company}} authors.
-
 syntax = "proto3";
-
 option java_multiple_files = true;
 option java_package = "{{company}}.{{appname_normalize}}";
 option java_outer_classname = "{{appname_normalize}}Proto";
-
 package {{appname}};
 // The service definition.
 service {{appname_normalize}} {
-   	//TODO:
-   	//implement another methods
-	
-	//example
-   	//rpc SayHello (HelloRequest) returns (HelloReply) {}
-
+       //TODO:
+       //implement another methods
+    
+    //example
+       //rpc SayHello (HelloRequest) returns (HelloReply) {}
  }
  
 //example
 // The request
 //message HelloRequest {
-//	string name = 1;
+//    string name = 1;
 //}
-
 // The response
 message HelloReply {
 //  string message = 1;
 //}
 `
 
-var contentFileServerGo = `
-/*
-	Copyright {{year}} {{company}} authors.
-	Generato files protobuf
-	protoc -I ../{{appname}} --go_out=plugins=grpc:../{{appname}} ../proto/{{appname}}.proto
+var contentFileServerGo = `/*
+    Copyright {{year}} {{company}} authors.
+    Generato files protobuf
+    protoc -I ../{{appname}} --go_out=plugins=grpc:../{{appname}} ../proto/{{appname}}.proto
 */
 package main
-
 import (
-	//"log"
-	"net"
-
-	"golang.org/x/net/context"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
+    //"log"
+    "net"
+    //"context"
+    "myTech/service"
 )
-
 const (
-	port = ":50051"
+    port = ":50051"
 )
-
 // server is used to implement {{appname_normalize}}Server.
-type server struct{}
-
 //Example function implements {{appname_normalize}}Server
-//func (s *server) SayHello(ctx context.Context, in *HelloRequest) (*HelloReply, error) {
-//	return &HelloReply{Message: "Hello " + in.Name}, nil
+//func (s *serverGrpc) SayHello(ctx context.Context, in *HelloRequest) (*HelloReply, error) {
+//    return &HelloReply{Message: "Hello " + in.Name}, nil
 //}
-
 func main() {
+    
+    fmt.Println("vai iniciar")
+    t := service.StInitService{}
+    t.Conf = &conf
+    t.CallbackKillMeSignal = func() {
+        service.LogPrintf(logger.INFO, "CallbackKillMeSignal")
+    }
 
-	startGrpcServer()
+    t.InitEnd = func() {
+       service.LogPrintf(logger.INFO, "InitEnd")
+    }
+    t.Grpc = Register{{appname_normalize}}Server
+    t.ServerGrpc = serverGrpc
+    t.DataDirs = []string{}
+    service.InitService(&t)
+    Logger = service.GetLogger()    
 }
-
-func startGrpcServer(){
-		lis, err := net.Listen("tcp", port)
-	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
-		os.Exit(1)
-	}
-	s := grpc.NewServer()
-	Register{{appname_normalize}}Server(s, &server{})
-	// Register reflection service on gRPC server.
-	reflection.Register(s)
-
-	if err := s.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
-		os.Exit(1)
-	}
+`
+var contentConfFileServerGo = `
+package main
+type StConfig struct {
+    ListenHttp string
+    ListenGrpc string
 }
+`
 
-
+var contentGlobalFileServerGo = `
+package main
+import (
+    "myTech/logger"
+    "myTech/service"
+)
+var (
+    config  = StConfig{}
+    Logger   *logger.Logger
+    serverGrpc = &service.ServerGrpc{}
+)
 `
